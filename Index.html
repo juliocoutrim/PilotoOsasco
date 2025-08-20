@@ -136,6 +136,50 @@
         </div>
     </div>
 
+    <!-- Admin Panel Modal -->
+    <div id="admin-panel" class="fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="w-full max-w-2xl p-8 bg-white rounded-lg shadow-lg relative">
+            <button id="close-admin-panel" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">Painel Administrativo</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="text-lg font-medium text-gray-800 mb-4">Adicionar Novo Usuário</h3>
+                    <form id="add-user-form" class="space-y-4">
+                        <div>
+                            <label for="new-user-name" class="block text-sm font-medium text-gray-700">Nome</label>
+                            <input type="text" id="new-user-name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="new-user-email" class="block text-sm font-medium text-gray-700">Email</label>
+                            <input type="email" id="new-user-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="new-user-password" class="block text-sm font-medium text-gray-700">Senha</label>
+                            <input type="password" id="new-user-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="new-user-role" class="block text-sm font-medium text-gray-700">Perfil</label>
+                            <select id="new-user-role" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                <option value="editor">Editor</option>
+                                <option value="visualizador">Visualizador</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">Adicionar Usuário</button>
+                    </form>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium text-gray-800 mb-4">Usuários Cadastrados</h3>
+                    <div id="user-list" class="space-y-2 max-h-64 overflow-y-auto pr-2">
+                        <!-- User list will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Dashboard -->
     <div id="dashboard">
         <!-- Modal for Name Input -->
@@ -191,6 +235,12 @@
                             <span class="text-gray-500">Logado como:</span>
                             <strong id="logged-in-user" class="text-gray-800"></strong>
                         </div>
+                        <button id="admin-button" class="hidden bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                            Painel Admin
+                        </button>
+                        <button id="save-changes-button" class="hidden bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                            Salvar Alterações na Base
+                        </button>
                         <button id="export-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
                             Exportar Base
                         </button>
@@ -644,6 +694,9 @@
             // --- STATE MANAGEMENT ---
             let currentUser = null;
             const storageKeyPrefix = 'pilot-task-status-';
+            const usersStorageKey = 'pilot-users';
+            const masterStorageKey = 'pilot-master-task-status';
+            let isDirty = false;
 
             // --- DOM ELEMENTS ---
             const loginScreen = document.getElementById('login-screen');
@@ -665,21 +718,45 @@
             const loggedInControls = document.getElementById('logged-in-controls');
             const loginEditButton = document.getElementById('login-edit-button');
             const closeLoginButton = document.getElementById('close-login');
+            const adminButton = document.getElementById('admin-button');
+            const adminPanel = document.getElementById('admin-panel');
+            const closeAdminPanelButton = document.getElementById('close-admin-panel');
+            const addUserForm = document.getElementById('add-user-form');
+            const userListDiv = document.getElementById('user-list');
+            const saveChangesButton = document.getElementById('save-changes-button');
             
-            // --- MOCK USER DATA ---
-            const users = {
-                "julio.coutrim@arlequim.com": {
-                    password: "99123",
-                    name: "Julio Coutrim"
+            // --- USER DATA ---
+            let users = {};
+
+            function loadUsers() {
+                const storedUsers = localStorage.getItem(usersStorageKey);
+                if (storedUsers) {
+                    users = JSON.parse(storedUsers);
+                } else {
+                    // Default admin user
+                    users = {
+                        "julio.coutrim@arlequim.com": {
+                            password: "99123",
+                            name: "Julio Coutrim",
+                            role: "admin"
+                        }
+                    };
+                    saveUsers();
                 }
-            };
+            }
+
+            function saveUsers() {
+                localStorage.setItem(usersStorageKey, JSON.stringify(users));
+            }
 
             // --- FUNCTIONS ---
-            function toggleEditMode(isLoggedIn) {
+            function updateUIForUserRole() {
                 const taskCheckboxes = document.querySelectorAll('.task-checkbox');
                 const taskLabels = document.querySelectorAll('.task-label');
+                const isAdmin = currentUser && currentUser.role === 'admin';
+                const isEditor = currentUser && currentUser.role === 'editor';
 
-                if (isLoggedIn) {
+                if (isAdmin || isEditor) {
                     loggedOutControls.classList.add('hidden');
                     loggedInControls.classList.add('flex');
                     loggedInControls.classList.remove('hidden');
@@ -688,7 +765,7 @@
                         label.classList.add('cursor-pointer');
                         label.classList.remove('disabled');
                     });
-                } else {
+                } else { // Viewer or logged out
                     loggedOutControls.classList.remove('hidden');
                     loggedInControls.classList.remove('flex');
                     loggedInControls.classList.add('hidden');
@@ -698,6 +775,12 @@
                         label.classList.add('disabled');
                     });
                 }
+
+                if (isAdmin) {
+                    adminButton.classList.remove('hidden');
+                } else {
+                    adminButton.classList.add('hidden');
+                }
             }
             
             function handleLogin() {
@@ -706,45 +789,73 @@
                 const user = users[email];
 
                 if (user && user.password === password) {
-                    currentUser = user;
+                    currentUser = { ...user, email: email };
                     loginScreen.style.display = 'none';
                     loggedInUserSpan.textContent = user.name;
                     updaterInput.value = user.name;
-                    toggleEditMode(true);
+                    updateUIForUserRole();
                 } else {
                     loginError.classList.remove('hidden');
                 }
             }
             
             function handleLogout() {
-                currentUser = null;
-                toggleEditMode(false);
+                if (isDirty) {
+                    if (confirm("Você tem alterações não salvas. Deseja sair mesmo assim?")) {
+                         loadMasterState(); // Revert changes
+                         isDirty = false;
+                         saveChangesButton.classList.add('hidden');
+                         currentUser = null;
+                         updateUIForUserRole();
+                    }
+                } else {
+                    currentUser = null;
+                    updateUIForUserRole();
+                }
             }
 
-            function loadTaskStatuses() {
-                document.querySelectorAll('.task-checkbox').forEach(checkbox => {
-                    const taskId = checkbox.id;
-                    if (localStorage.getItem(storageKeyPrefix + taskId) === 'completed') {
-                        checkbox.checked = true;
+            function loadMasterState() {
+                const masterState = localStorage.getItem(masterStorageKey);
+                if (masterState) {
+                    const tasks = JSON.parse(masterState);
+                    for (const taskId in tasks) {
+                        const checkbox = document.getElementById(taskId);
+                        if (checkbox) {
+                            checkbox.checked = tasks[taskId];
+                        }
                     }
-                });
-                const updaterName = localStorage.getItem('updaterName');
+                }
+                 const updaterName = localStorage.getItem('updaterName');
                 const updateDate = localStorage.getItem('updateDate');
                 if (updaterName && updateDate) {
                     document.getElementById('updater-name').textContent = updaterName;
                     document.getElementById('update-date').textContent = updateDate;
                 }
             }
+            
+            function saveMasterState() {
+                const tasks = {};
+                 document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+                    tasks[checkbox.id] = checkbox.checked;
+                });
+                localStorage.setItem(masterStorageKey, JSON.stringify(tasks));
+
+                const updaterName = currentUser.name;
+                const updateDate = new Date().toLocaleString('pt-BR');
+                document.getElementById('updater-name').textContent = updaterName;
+                document.getElementById('update-date').textContent = updateDate;
+                localStorage.setItem('updaterName', updaterName);
+                localStorage.setItem('updateDate', updateDate);
+
+                isDirty = false;
+                saveChangesButton.classList.add('hidden');
+                showMessage('Alterações salvas na base com sucesso!');
+            }
+
 
             function handleTaskChange(event) {
-                const checkbox = event.currentTarget;
-                const taskId = checkbox.id;
-                
-                if (checkbox.checked) {
-                    localStorage.setItem(storageKeyPrefix + taskId, 'completed');
-                } else {
-                    localStorage.removeItem(storageKeyPrefix + taskId);
-                }
+                isDirty = true;
+                saveChangesButton.classList.remove('hidden');
             }
 
             function showMessage(message, isError = false) {
@@ -766,12 +877,49 @@
                     messageBox.style.display = 'none';
                 }, 5000);
             }
+            
+            function populateUserList() {
+                userListDiv.innerHTML = '';
+                for (const email in users) {
+                    const user = users[email];
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'p-2 border rounded bg-gray-50 text-sm';
+                    userDiv.innerHTML = `<p><strong>Nome:</strong> ${user.name}</p><p><strong>Email:</strong> ${email}</p><p><strong>Perfil:</strong> ${user.role}</p>`;
+                    userListDiv.appendChild(userDiv);
+                }
+            }
 
             // --- EVENT LISTENERS ---
             loginButton.addEventListener('click', handleLogin);
             logoutButton.addEventListener('click', handleLogout);
             loginEditButton.addEventListener('click', () => loginScreen.style.display = 'flex');
             closeLoginButton.addEventListener('click', () => loginScreen.style.display = 'none');
+            adminButton.addEventListener('click', () => {
+                populateUserList();
+                adminPanel.style.display = 'flex';
+            });
+            closeAdminPanelButton.addEventListener('click', () => adminPanel.style.display = 'none');
+            saveChangesButton.addEventListener('click', saveMasterState);
+            
+            addUserForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = document.getElementById('new-user-name').value;
+                const email = document.getElementById('new-user-email').value;
+                const password = document.getElementById('new-user-password').value;
+                const role = document.getElementById('new-user-role').value;
+
+                if (users[email]) {
+                    showMessage('Este email já está cadastrado.', true);
+                    return;
+                }
+
+                users[email] = { name, password, role };
+                saveUsers();
+                populateUserList();
+                addUserForm.reset();
+                showMessage('Usuário adicionado com sucesso!');
+            });
+
             
             document.querySelectorAll('.task-checkbox').forEach(checkbox => {
                 checkbox.addEventListener('change', handleTaskChange);
@@ -857,7 +1005,6 @@
                                 
                                 if (checkbox.checked !== isCompleted) {
                                     checkbox.checked = isCompleted;
-                                    handleTaskChange({ currentTarget: checkbox });
                                     tasksUpdated++;
                                     updatedDescriptions.push(`- ${row['Descrição da Atividade']}`);
                                 }
@@ -869,11 +1016,11 @@
                         
                         document.getElementById('updater-name').textContent = updaterName;
                         document.getElementById('update-date').textContent = updateDate;
-                        localStorage.setItem('updaterName', updaterName);
-                        localStorage.setItem('updateDate', updateDate);
-
+                        
                         if (tasksUpdated > 0) {
-                            let message = `<strong>${tasksUpdated} tarefas atualizadas:</strong><br>${updatedDescriptions.join('<br>')}`;
+                            isDirty = true;
+                            saveChangesButton.classList.remove('hidden');
+                            let message = `<strong>${tasksUpdated} tarefas atualizadas a partir do arquivo.</strong><br>Clique em "Salvar Alterações" para confirmar.`;
                             showMessage(message);
                         } else {
                             showMessage('Nenhuma tarefa foi atualizada. Verifique se a coluna "Status" foi preenchida corretamente.', true);
@@ -921,8 +1068,9 @@
             });
 
             // Initial page setup
-            toggleEditMode(false);
-            loadTaskStatuses();
+            loadUsers();
+            updateUIForUserRole(); // Set initial state to logged out / viewer
+            loadMasterState();
         });
     </script>
 
