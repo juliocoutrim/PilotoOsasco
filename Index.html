@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cronograma Visual do Piloto</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Vertical line for mobile view */
+        @media (max-width: 1023px) {
+            .timeline-item:not(:last-child)::after {
+                content: '';
+                position: absolute;
+                left: 48px; /* Aligned with the center of the icon */
+                transform: translateX(-50%);
+                top: 96px; /* Start below the icon circle */
+                bottom: -1.5rem; /* Extend down to the next item's top margin */
+                width: 2px;
+                background-color: #e5e7eb; /* gray-200 */
+                z-index: 1;
+            }
+        }
+        /* Card hover effect */
+        .card-interactive {
+            transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+        }
+        .card-interactive:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 10px_15px_-3px_rgb(0_0_0_/_0.1), 0_4px_6px_-4px_rgb(0_0_0_/_0.1);
+        }
+        /* Animation for the current week highlight */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px 0px rgba(59, 130, 246, 0.4); }
+            50% { box-shadow: 0 0 25px 8px rgba(59, 130, 246, 0.2); }
+        }
+        .current-week-card {
+            animation: pulse-glow 2.5s infinite;
+        }
+        /* Animation for the current week icon */
+        @keyframes bobbing-icon {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        @keyframes fireworks-burst {
+            0% { transform: scale(1); opacity: 0.5; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
+        .current-week-icon-animation {
+            animation: bobbing-icon 2s ease-in-out infinite;
+        }
+        .current-week-icon-animation::before, .current-week-icon-animation::after {
+            content: '';
+            position: absolute;
+            top: -4px; left: -4px; right: -4px; bottom: -4px;
+            border-radius: 50%;
+            border: 2px solid #60A5FA; /* blue-400 */
+            opacity: 0;
+        }
+        .current-week-icon-animation::before {
+            animation: fireworks-burst 2s infinite;
+        }
+        .current-week-icon-animation::after {
+            animation: fireworks-burst 2s infinite;
+            animation-delay: 1s;
+        }
+        /* Styles for collapsible sections and checkable tasks */
+        details > summary {
+            list-style: none;
+            cursor: pointer;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+        .task-label span {
+            transition: color 0.2s;
+        }
+        .task-checkbox:checked + span {
+            text-decoration: line-through;
+            color: #9ca3af; /* text-gray-400 */
+        }
+        .task-checkbox:disabled + span {
+             color: #6b7280; /* text-gray-500 */
+        }
+         .task-checkbox:disabled {
+            cursor: not-allowed;
+        }
+        .task-label.disabled {
+            cursor: default;
+        }
+        details summary .arrow {
+            transition: transform 0.2s;
+        }
+        details[open] summary .arrow {
+            transform: rotate(90deg);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Login Modal -->
+    <div id="login-screen" class="fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-lg relative">
+             <button id="close-login" class="absolute top-2 right-2 text-gray-500 hover:text-gray-800">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <div>
+                <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                    Acessar o Painel do Piloto
+                </h2>
+            </div>
+            <div class="mt-8 space-y-6">
+                <div class="rounded-md shadow-sm -space-y-px">
+                    <div>
+                        <label for="email-address" class="sr-only">Email</label>
+                        <input id="email-address" name="email" type="email" autocomplete="email" required class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" placeholder="Email">
+                    </div>
+                    <div>
+                        <label for="password" class="sr-only">Senha</label>
+                        <input id="password" name="password" type="password" autocomplete="current-password" required class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" placeholder="Senha">
+                    </div>
+                </div>
+                <p id="login-error" class="text-red-500 text-sm text-center hidden">Email ou senha inválidos.</p>
+                <div>
+                    <button id="login-button" class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Entrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard">
+        <!-- Modal for Name Input -->
+        <div id="name-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 hidden">
+            <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <div class="mt-3 text-center">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Registrar Atualização</h3>
+                    <div class="mt-2 px-7 py-3">
+                        <label for="updater-input" class="text-sm text-gray-500 block text-left">Seu Nome:</label>
+                        <input type="text" id="updater-input" class="mt-1 px-3 py-2 bg-white border shadow-sm border-gray-300 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-blue-500 block w-full rounded-md sm:text-sm focus:ring-1" placeholder="Digite seu nome" readonly>
+                    </div>
+                    <div class="items-center px-4 py-3">
+                        <button id="confirm-import" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                            Confirmar e Selecionar Arquivo
+                        </button>
+                         <button id="cancel-import" class="mt-2 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Generic Message Box -->
+        <div id="message-box" class="fixed top-5 right-5 p-4 rounded-lg shadow-lg z-50 hidden transition-opacity duration-300 max-w-sm">
+            <p id="message-text" class="text-sm"></p>
+        </div>
+
+
+        <div class="max-w-full lg:max-w-screen-2xl mx-auto p-4 lg:p-8">
+            <!-- Header -->
+            <header class="text-center mb-8">
+                <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Cronograma Visual do Piloto</h1>
+                <p class="text-md text-gray-600 mt-2">Uma visão geral das etapas do projeto até 30/09</p>
+            </header>
+
+            <!-- Update Status and Controls -->
+            <div class="mb-8 p-4 bg-white rounded-lg shadow-md flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div class="text-sm text-gray-600">
+                    <span>Última atualização por:</span>
+                    <strong id="updater-name" class="text-blue-600">N/A</strong>
+                    <span>em</span>
+                    <strong id="update-date" class="text-blue-600">N/A</strong>
+                </div>
+                <div id="controls-container" class="flex items-center gap-4">
+                    <div id="logged-out-controls">
+                        <button id="login-edit-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                            Login para Editar
+                        </button>
+                    </div>
+                    <div id="logged-in-controls" class="hidden items-center gap-4">
+                        <div class="text-sm">
+                            <span class="text-gray-500">Logado como:</span>
+                            <strong id="logged-in-user" class="text-gray-800"></strong>
+                        </div>
+                        <button id="export-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                            Exportar Base
+                        </button>
+                        <button id="import-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                            Importar Base
+                        </button>
+                        <button id="logout-button" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                            Sair
+                        </button>
+                        <input type="file" id="file-input" class="hidden" accept=".xlsx, .xls">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline Container -->
+            <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] lg:gap-x-4 items-start">
+
+                <!-- Etapa 1: Preparação Técnica -->
+                <div class="flex-1 mb-8 lg:mb-0 relative timeline-item" data-start="2025-08-18" data-end="2025-08-22">
+                    <div class="flex lg:flex-col items-center text-center relative">
+                        <div class="relative timeline-icon w-24 h-24 flex-shrink-0 rounded-full bg-blue-500 border-4 border-gray-100 flex items-center justify-center text-white shadow-lg z-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        </div>
+                        <div class="lg:mt-4 pl-4 lg:pl-0">
+                            <p class="font-bold text-blue-600 text-sm lg:text-base">Semana 1: 18 a 22/08</p>
+                            <div class="font-semibold text-gray-800 text-lg flex items-center justify-center flex-wrap gap-x-2"><span>Preparação Técnica</span></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-white rounded-lg shadow-md p-4 border-l-4 border-blue-500 card-interactive">
+                        <div class="text-sm text-gray-700 space-y-3 text-left">
+                            <p class="bg-blue-100 p-2 rounded-md"><strong>Objetivo:</strong> Garantir que a infraestrutura e os pré-requisitos técnicos estejam prontos.</p>
+                            <p><strong>Time em campo:</strong> Rafael Rabelo, Renan e Poliana</p>
+                            <div class="space-y-2">
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">NEGÓCIO <span class="text-blue-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-n1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Disparar para time Osasco planejamento final do piloto</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-n2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Time Osasco comunicar escolas</span></label>
+                                    </div>
+                                </details>
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">INFRAESTRUTURA <span class="text-blue-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Validação do login com credenciais e SSO</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Compra dos kits de régua de energia</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i3" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Compra e avaliação do hub USB 3.0 (4G)</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i4" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Criar Arlequins Pool</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i5" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Criar Arlequins 1:1 professor</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i6" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Validar script de instalação e certificado wifi</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i7" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Compra de pendrives para instalação</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i8" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Definir time de campo para instalação</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i9" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Infraestrutura Game Escola</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i10" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Testes de performance de imagem tunada</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-i11" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Validar finger print com regedit</span></label>
+                                    </div>
+                                </details>
+                                 <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">GAME ESCOLA <span class="text-blue-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-g1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Definir estratégia e campanha para escolas piloto</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-g2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Definir como monitorar resultado</span></label>
+                                    </div>
+                                </details>
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">MICROSOFT EDUCATION <span class="text-blue-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-m1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Definir agenda de treinamento</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w1-m2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span>Fechar contrato</span></label>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-sm text-blue-800 bg-blue-50 p-2 rounded font-semibold text-left"><strong>Marco:</strong> Ambiente técnico pronto para instalação dos clientes.</p>
+                    </div>
+                </div>
+                
+                <!-- Arrow 1 -->
+                <div class="hidden lg:flex items-center justify-center h-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </div>
+
+                <!-- Etapa 2: Ambiente Pronto -->
+                <div class="flex-1 mb-8 lg:mb-0 relative timeline-item" data-start="2025-08-25" data-end="2025-08-29">
+                     <div class="flex lg:flex-col items-center text-center relative">
+                        <div class="relative timeline-icon w-24 h-24 flex-shrink-0 rounded-full bg-orange-500 border-4 border-gray-100 flex items-center justify-center text-white shadow-lg z-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                        </div>
+                        <div class="lg:mt-4 pl-4 lg:pl-0">
+                            <p class="font-bold text-orange-600 text-sm lg:text-base">Semana 2: 25 a 29/08</p>
+                            <div class="font-semibold text-gray-800 text-lg flex items-center justify-center flex-wrap gap-x-2"><span>Ambiente Pronto</span></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-white rounded-lg shadow-md p-4 border-l-4 border-orange-500 card-interactive">
+                        <div class="text-sm text-gray-700 space-y-3 text-left">
+                            <p class="bg-orange-100 p-2 rounded-md"><strong>Objetivo:</strong> Disponibilizar infraestrutura e máquinas virtuais preparadas.</p>
+                            <p><strong>Time de campo:</strong> Murilo, Ariel, Renan, Poliana, Time Poliana, Técnico E-governe</p>
+                            <div class="space-y-2">
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">NEGÓCIO <span class="text-orange-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w2-n1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"><span>André Moro aprovar e validar campanha Game Escola Adoção</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w2-n2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"><span>Criar plano de comunicação e suporte para o projeto</span></label>
+                                    </div>
+                                </details>
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">INFRAESTRUTURA <span class="text-orange-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w2-i1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"><span>Instalação do cliente Omnissa em 303 microcomputadores</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w2-i2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"><span>Teste de login com imagem nova nos microcomputadores</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w2-i3" class="task-checkbox h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"><span>Ajustes de parâmetros de desempenho e segurança</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w2-i4" class="task-checkbox h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"><span>Criar canal de comunicação e suporte para o piloto</span></label>
+                                    </div>
+                                </details>
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">GAME ESCOLA <span class="text-orange-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w2-g1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"><span>Apresentar estratégia e campanha das escolas piloto</span></label>
+                                    </div>
+                                </details>
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">MICROSOFT EDUCATION <span class="text-orange-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w2-m1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"><span>Agenda de treinamento definida e marcada</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w2-m2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"><span>Contrato fechado</span></label>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="pt-2 border-t mt-2">
+                                 <div class="bg-gray-50 rounded-lg border">
+                                    <p class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2">CRONOGRAMA DE USO DE ARLEQUINS</p>
+                                    <div class="p-2 border-t border-gray-200 space-y-2">
+                                        <details class="text-xs bg-green-50 p-2 rounded cursor-pointer border border-green-200"><summary class="font-semibold text-green-800 flex items-center"><span class="arrow mr-2">▶</span>EMEF Benedicto Weschenfelder</summary>
+                                            <ul class="mt-2 pl-2 text-gray-700 space-y-1">
+                                                <li><strong>Segunda:</strong> 4º E</li>
+                                                <li><strong>Terça:</strong> 4º A</li>
+                                                <li><strong>Quarta:</strong> 4º C e 4º D</li>
+                                                <li><strong>Quinta:</strong> 4º B</li>
+                                                <li><strong>Sexta:</strong> 4º F</li>
+                                            </ul>
+                                        </details>
+                                        <details class="text-xs bg-purple-50 p-2 rounded cursor-pointer border border-purple-200"><summary class="font-semibold text-purple-800 flex items-center"><span class="arrow mr-2">▶</span>EMEF Marechal Bittencourt</summary>
+                                            <table class="w-full mt-2 text-gray-700 text-center">
+                                                <thead>
+                                                    <tr class="bg-purple-100">
+                                                        <th class="p-1 font-semibold">Aula</th>
+                                                        <th class="p-1 font-semibold">Segunda</th>
+                                                        <th class="p-1 font-semibold">Terça</th>
+                                                        <th class="p-1 font-semibold">Quarta</th>
+                                                        <th class="p-1 font-semibold">Quinta</th>
+                                                        <th class="p-1 font-semibold">Sexta</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr><td colspan="6" class="pt-2 font-bold text-left">Manhã</td></tr>
+                                                    <tr><td class="p-1 border-b">1ª aula</td><td class="p-1 border-b">4º B</td><td class="p-1 border-b">4º B</td><td class="p-1 border-b">-</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º B</td></tr>
+                                                    <tr><td class="p-1 border-b">3ª aula</td><td class="p-1 border-b">4º A</td><td class="p-1 border-b">4º A</td><td class="p-1 border-b">-</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º A</td></tr>
+                                                    <tr><td colspan="6" class="pt-2 font-bold text-left">Tarde</td></tr>
+                                                    <tr><td class="p-1 border-b">1ª/2ª aula</td><td class="p-1 border-b">4º C</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º C</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º C</td></tr>
+                                                    <tr><td class="p-1 border-b">3ª aula</td><td class="p-1 border-b">4º D</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º D</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º D</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </details>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-sm text-orange-800 bg-orange-50 p-2 rounded font-semibold text-left"><strong>Marco:</strong> Todas as estações preparadas para o início do piloto com solução aprovada.</p>
+                    </div>
+                </div>
+
+                <!-- Arrow 2 -->
+                 <div class="hidden lg:flex items-center justify-center h-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </div>
+
+                <!-- Etapa 3: Início do Piloto -->
+                <div class="flex-1 mb-8 lg:mb-0 relative timeline-item" data-start="2025-09-01" data-end="2025-09-05">
+                     <div class="flex lg:flex-col items-center text-center relative">
+                        <div class="relative timeline-icon w-24 h-24 flex-shrink-0 rounded-full bg-gray-500 border-4 border-gray-100 flex items-center justify-center text-white shadow-lg z-10">
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        </div>
+                        <div class="lg:mt-4 pl-4 lg:pl-0">
+                            <p class="font-bold text-gray-600 text-sm lg:text-base">Semana 3: 01 a 05/09</p>
+                            <div class="font-semibold text-gray-800 text-lg flex items-center justify-center flex-wrap gap-x-2"><span>Início do Piloto</span></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-white rounded-lg shadow-md p-4 border-l-4 border-gray-500 card-interactive">
+                        <div class="text-sm text-gray-700 space-y-3 text-left">
+                           <p class="bg-gray-100 p-2 rounded-md"><strong>Objetivo:</strong> Colocar usuários em produção com suporte inicial.</p>
+                           <p><strong>Time de campo:</strong> Julio, Ariel, Renan, Poliana e time, Técnico E-governe</p>
+                           <div class="space-y-2">
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">NEGÓCIO <span class="text-gray-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w3-n1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"><span>Kick-off do piloto com professores e alunos selecionados</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w3-n2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"><span>Entregar plano de comunicação e suporte para o projeto</span></label>
+                                    </div>
+                                </details>
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">CX <span class="text-gray-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w3-c1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"><span>Entrega de instruções de acesso + suporte inicial</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w3-c2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"><span>Abertura de canal de feedback (formulário/canal dedicado)</span></label>
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w3-c3" class="task-checkbox h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"><span>Monitoramento de login, performance e incidentes</span></label>
+                                    </div>
+                                </details>
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">GAME ESCOLA <span class="text-gray-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w3-g1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"><span>Apresentar estratégia e campanha das escolas piloto internamente</span></label>
+                                    </div>
+                                </details>
+                                 <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">MICROSOFT EDUCATION <span class="text-gray-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 task-label"><input type="checkbox" id="task-w3-m1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"><span>Inicio do treinamento</span></label>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="pt-2 border-t mt-2">
+                                 <div class="bg-gray-50 rounded-lg border">
+                                    <p class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2">CRONOGRAMA DE USO DE ARLEQUINS</p>
+                                    <div class="p-2 border-t border-gray-200 space-y-2">
+                                        <details class="text-xs bg-green-50 p-2 rounded cursor-pointer border border-green-200"><summary class="font-semibold text-green-800 flex items-center"><span class="arrow mr-2">▶</span>EMEF Benedicto Weschenfelder</summary>
+                                            <ul class="mt-2 pl-2 text-gray-700 space-y-1">
+                                                <li><strong>Segunda:</strong> 4º E</li>
+                                                <li><strong>Terça:</strong> 4º A</li>
+                                                <li><strong>Quarta:</strong> 4º C e 4º D</li>
+                                                <li><strong>Quinta:</strong> 4º B</li>
+                                                <li><strong>Sexta:</strong> 4º F</li>
+                                            </ul>
+                                        </details>
+                                        <details class="text-xs bg-purple-50 p-2 rounded cursor-pointer border border-purple-200"><summary class="font-semibold text-purple-800 flex items-center"><span class="arrow mr-2">▶</span>EMEF Marechal Bittencourt</summary>
+                                            <table class="w-full mt-2 text-gray-700 text-center">
+                                                <thead>
+                                                    <tr class="bg-purple-100">
+                                                        <th class="p-1 font-semibold">Aula</th>
+                                                        <th class="p-1 font-semibold">Segunda</th>
+                                                        <th class="p-1 font-semibold">Terça</th>
+                                                        <th class="p-1 font-semibold">Quarta</th>
+                                                        <th class="p-1 font-semibold">Quinta</th>
+                                                        <th class="p-1 font-semibold">Sexta</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr><td colspan="6" class="pt-2 font-bold text-left">Manhã</td></tr>
+                                                    <tr><td class="p-1 border-b">1ª aula</td><td class="p-1 border-b">4º B</td><td class="p-1 border-b">4º B</td><td class="p-1 border-b">-</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º B</td></tr>
+                                                    <tr><td class="p-1 border-b">3ª aula</td><td class="p-1 border-b">4º A</td><td class="p-1 border-b">4º A</td><td class="p-1 border-b">-</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º A</td></tr>
+                                                    <tr><td colspan="6" class="pt-2 font-bold text-left">Tarde</td></tr>
+                                                    <tr><td class="p-1 border-b">1ª/2ª aula</td><td class="p-1 border-b">4º C</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º C</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º C</td></tr>
+                                                    <tr><td class="p-1 border-b">3ª aula</td><td class="p-1 border-b">4º D</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º D</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º D</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </details>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-sm text-gray-800 bg-gray-100 p-2 rounded font-semibold text-left"><strong>Marco:</strong> Primeira semana de uso real monitorado.</p>
+                    </div>
+                </div>
+                
+                <!-- Arrow 3 -->
+                 <div class="hidden lg:flex items-center justify-center h-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </div>
+
+                <!-- Etapa 4: Consolidação -->
+                <div class="flex-1 mb-8 lg:mb-0 relative timeline-item" data-start="2025-09-08" data-end="2025-09-12">
+                    <div class="flex lg:flex-col items-center text-center relative">
+                        <div class="relative timeline-icon w-24 h-24 flex-shrink-0 rounded-full bg-yellow-500 border-4 border-gray-100 flex items-center justify-center text-white shadow-lg z-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.286zm0 13.036h.008v.016h-.008v-.016z" /></svg>
+                        </div>
+                        <div class="lg:mt-4 pl-4 lg:pl-0">
+                            <p class="font-bold text-yellow-600 text-sm lg:text-base">Semana 4: 08 a 12/09</p>
+                            <div class="font-semibold text-gray-800 text-lg flex items-center justify-center flex-wrap gap-x-2"><span>Consolidação</span></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-white rounded-lg shadow-md p-4 border-l-4 border-yellow-500 card-interactive">
+                        <div class="text-sm text-gray-700 space-y-3 text-left">
+                            <p class="bg-yellow-100 p-2 rounded-md"><strong>Objetivo:</strong> Validar estabilidade técnica e pedagógica.</p>
+                            <p><strong>Time de campo:</strong> Kelsser, Renan e Poliana</p>
+                             <div class="space-y-2">
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">CX <span class="text-yellow-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w4-c1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"><span>Coleta de primeiros feedbacks dos usuários</span></label>
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w4-c2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"><span>Medição de desempenho e estabilidade do ambiente</span></label>
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w4-c3" class="task-checkbox h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"><span>Ajustes de falhas críticas levantadas</span></label>
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w4-c4" class="task-checkbox h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"><span>Avaliação da adesão e engajamento</span></label>
+                                    </div>
+                                </details>
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">GAME ESCOLA <span class="text-yellow-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                         <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w4-g1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"><span>Fazer treinamento com professores de Osasco</span></label>
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w4-g2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"><span>Apresentar estratégia e campanha das escolas piloto</span></label>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="pt-2 border-t mt-2">
+                                 <div class="bg-gray-50 rounded-lg border">
+                                    <p class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2">CRONOGRAMA DE USO DE ARLEQUINS</p>
+                                    <div class="p-2 border-t border-gray-200 space-y-2">
+                                        <details class="text-xs bg-green-50 p-2 rounded cursor-pointer border border-green-200"><summary class="font-semibold text-green-800 flex items-center"><span class="arrow mr-2">▶</span>EMEF Benedicto Weschenfelder</summary>
+                                            <ul class="mt-2 pl-2 text-gray-700 space-y-1">
+                                                <li><strong>Segunda:</strong> 4º E</li>
+                                                <li><strong>Terça:</strong> 4º A</li>
+                                                <li><strong>Quarta:</strong> 4º C e 4º D</li>
+                                                <li><strong>Quinta:</strong> 4º B</li>
+                                                <li><strong>Sexta:</strong> 4º F</li>
+                                            </ul>
+                                        </details>
+                                        <details class="text-xs bg-purple-50 p-2 rounded cursor-pointer border border-purple-200"><summary class="font-semibold text-purple-800 flex items-center"><span class="arrow mr-2">▶</span>EMEF Marechal Bittencourt</summary>
+                                            <table class="w-full mt-2 text-gray-700 text-center">
+                                                <thead>
+                                                    <tr class="bg-purple-100">
+                                                        <th class="p-1 font-semibold">Aula</th>
+                                                        <th class="p-1 font-semibold">Segunda</th>
+                                                        <th class="p-1 font-semibold">Terça</th>
+                                                        <th class="p-1 font-semibold">Quarta</th>
+                                                        <th class="p-1 font-semibold">Quinta</th>
+                                                        <th class="p-1 font-semibold">Sexta</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr><td colspan="6" class="pt-2 font-bold text-left">Manhã</td></tr>
+                                                    <tr><td class="p-1 border-b">1ª aula</td><td class="p-1 border-b">4º B</td><td class="p-1 border-b">4º B</td><td class="p-1 border-b">-</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º B</td></tr>
+                                                    <tr><td class="p-1 border-b">3ª aula</td><td class="p-1 border-b">4º A</td><td class="p-1 border-b">4º A</td><td class="p-1 border-b">-</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º A</td></tr>
+                                                    <tr><td colspan="6" class="pt-2 font-bold text-left">Tarde</td></tr>
+                                                    <tr><td class="p-1 border-b">1ª/2ª aula</td><td class="p-1 border-b">4º C</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º C</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º C</td></tr>
+                                                    <tr><td class="p-1 border-b">3ª aula</td><td class="p-1 border-b">4º D</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º D</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º D</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </details>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-sm text-yellow-800 bg-yellow-50 p-2 rounded font-semibold text-left"><strong>Marco:</strong> Ajustes aplicados e piloto consolidado.</p>
+                    </div>
+                </div>
+
+                <!-- Arrow 4 -->
+                <div class="hidden lg:flex items-center justify-center h-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </div>
+
+                <!-- Etapa 5: Análise Intermediária -->
+                <div class="flex-1 mb-8 lg:mb-0 relative timeline-item" data-start="2025-09-15" data-end="2025-09-19">
+                    <div class="flex lg:flex-col items-center text-center relative">
+                        <div class="relative timeline-icon w-24 h-24 flex-shrink-0 rounded-full bg-teal-500 border-4 border-gray-100 flex items-center justify-center text-white shadow-lg z-10">
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.572L16.5 21.75l-.398-1.178a3.375 3.375 0 00-2.456-2.456L12.5 18l1.178-.398a3.375 3.375 0 002.456-2.456L16.5 14.25l.398 1.178a3.375 3.375 0 002.456 2.456L20.5 18l-1.178.398a3.375 3.375 0 00-2.456 2.456z" /></svg>
+                        </div>
+                        <div class="lg:mt-4 pl-4 lg:pl-0">
+                            <p class="font-bold text-teal-600 text-sm lg:text-base">Semana 5: 15 a 19/09</p>
+                            <div class="font-semibold text-gray-800 text-lg flex items-center justify-center flex-wrap gap-x-2"><span>Análise Intermediária</span></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-white rounded-lg shadow-md p-4 border-l-4 border-teal-500 card-interactive">
+                        <div class="text-sm text-gray-700 space-y-3 text-left">
+                           <p class="bg-teal-100 p-2 rounded-md"><strong>Objetivo:</strong> Consolidar aprendizados e preparar melhorias.</p>
+                           <p><strong>Time de campo:</strong> Julio, Renan e Poliana</p>
+                           <div class="space-y-2">
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">CX <span class="text-teal-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w5-c1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"><span>Consolidação de feedback técnico e pedagógico</span></label>
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w5-c2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"><span>Implementação de melhorias rápidas (quick wins)</span></label>
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w5-c3" class="task-checkbox h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"><span>Preparação do checklist de próximos passos</span></label>
+                                    </div>
+                                </details>
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">GAME ESCOLA <span class="text-teal-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w5-g1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"><span>Iniciar campanha nas escolas piloto, apresentando canais e conteúdos</span></label>
+                                    </div>
+                                </details>
+                            </div>
+                             <div class="pt-2 border-t mt-2">
+                                 <div class="bg-gray-50 rounded-lg border">
+                                    <p class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2">CRONOGRAMA DE USO DE ARLEQUINS</p>
+                                    <div class="p-2 border-t border-gray-200 space-y-2">
+                                        <details class="text-xs bg-green-50 p-2 rounded cursor-pointer border border-green-200"><summary class="font-semibold text-green-800 flex items-center"><span class="arrow mr-2">▶</span>EMEF Benedicto Weschenfelder</summary>
+                                            <ul class="mt-2 pl-2 text-gray-700 space-y-1">
+                                                <li><strong>Segunda:</strong> 4º E</li>
+                                                <li><strong>Terça:</strong> 4º A</li>
+                                                <li><strong>Quarta:</strong> 4º C e 4º D</li>
+                                                <li><strong>Quinta:</strong> 4º B</li>
+                                                <li><strong>Sexta:</strong> 4º F</li>
+                                            </ul>
+                                        </details>
+                                        <details class="text-xs bg-purple-50 p-2 rounded cursor-pointer border border-purple-200"><summary class="font-semibold text-purple-800 flex items-center"><span class="arrow mr-2">▶</span>EMEF Marechal Bittencourt</summary>
+                                            <table class="w-full mt-2 text-gray-700 text-center">
+                                                <thead>
+                                                    <tr class="bg-purple-100">
+                                                        <th class="p-1 font-semibold">Aula</th>
+                                                        <th class="p-1 font-semibold">Segunda</th>
+                                                        <th class="p-1 font-semibold">Terça</th>
+                                                        <th class="p-1 font-semibold">Quarta</th>
+                                                        <th class="p-1 font-semibold">Quinta</th>
+                                                        <th class="p-1 font-semibold">Sexta</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr><td colspan="6" class="pt-2 font-bold text-left">Manhã</td></tr>
+                                                    <tr><td class="p-1 border-b">1ª aula</td><td class="p-1 border-b">4º B</td><td class="p-1 border-b">4º B</td><td class="p-1 border-b">-</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º B</td></tr>
+                                                    <tr><td class="p-1 border-b">3ª aula</td><td class="p-1 border-b">4º A</td><td class="p-1 border-b">4º A</td><td class="p-1 border-b">-</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º A</td></tr>
+                                                    <tr><td colspan="6" class="pt-2 font-bold text-left">Tarde</td></tr>
+                                                    <tr><td class="p-1 border-b">1ª/2ª aula</td><td class="p-1 border-b">4º C</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º C</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º C</td></tr>
+                                                    <tr><td class="p-1 border-b">3ª aula</td><td class="p-1 border-b">4º D</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º D</td><td class="p-1 border-b">-</td><td class="p-1 border-b">4º D</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </details>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-sm text-teal-800 bg-teal-50 p-2 rounded font-semibold text-left"><strong>Marco:</strong> Feedback consolidado para planejamento final.</p>
+                    </div>
+                </div>
+
+                <!-- Arrow 5 -->
+                <div class="hidden lg:flex items-center justify-center h-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </div>
+
+                <!-- Etapa 6: Fechamento -->
+                <div class="flex-1 relative timeline-item" data-start="2025-09-22" data-end="2025-09-26">
+                    <div class="flex lg:flex-col items-center text-center relative">
+                        <div class="relative timeline-icon w-24 h-24 flex-shrink-0 rounded-full bg-green-500 border-4 border-gray-100 flex items-center justify-center text-white shadow-lg z-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 18.75h-9a9 9 0 119 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 21h10.5c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H6.75c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" /><path stroke-linecap="round" stroke-linejoin="round" d="M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
+                        </div>
+                        <div class="lg:mt-4 pl-4 lg:pl-0">
+                            <p class="font-bold text-green-600 text-sm lg:text-base">Semana 6: 22 a 26/09</p>
+                            <div class="font-semibold text-gray-800 text-lg flex items-center justify-center flex-wrap gap-x-2"><span>Fechamento do Piloto</span></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-white rounded-lg shadow-md p-4 border-l-4 border-green-500 card-interactive">
+                        <div class="text-sm text-gray-700 space-y-3 text-left">
+                            <p class="bg-green-100 p-2 rounded-md"><strong>Objetivo:</strong> Concluir análise e preparar expansão.</p>
+                            <p><strong>Atores:</strong> Kelsser, Murilo, Renan, Poliana.</p>
+                            <div class="space-y-2">
+                                <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">CX <span class="text-green-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w6-c1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"><span>Relatório de resultados consolidados (técnico e pedagógico)</span></label>
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w6-c2" class="task-checkbox h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"><span>Análise de métricas (login, uso, incidentes, satisfação)</span></label>
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w6-c3" class="task-checkbox h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"><span>Alinhamento final com stakeholders para expansão/rollout</span></label>
+                                    </div>
+                                </details>
+                                 <details class="bg-gray-50 rounded-lg border"><summary class="font-semibold text-gray-600 text-xs uppercase tracking-wider p-2 flex justify-between items-center">GAME ESCOLA <span class="text-green-500 text-lg">+</span></summary>
+                                    <div class="p-2 border-t border-gray-200">
+                                        <label class="flex items-center space-x-3 p-1 cursor-pointer task-label"><input type="checkbox" id="task-w6-g1" class="task-checkbox h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"><span>Avaliação da eficácia da primeira semana.</span></label>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                        <p class="mt-4 text-sm text-green-800 bg-green-50 p-2 rounded font-semibold text-left"><strong>Marco:</strong> Relatório final entregue e decisão sobre rollout.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // --- STATE MANAGEMENT ---
+            let currentUser = null;
+            const storageKeyPrefix = 'pilot-task-status-';
+
+            // --- DOM ELEMENTS ---
+            const loginScreen = document.getElementById('login-screen');
+            const dashboard = document.getElementById('dashboard');
+            const loginButton = document.getElementById('login-button');
+            const logoutButton = document.getElementById('logout-button');
+            const emailInput = document.getElementById('email-address');
+            const passwordInput = document.getElementById('password');
+            const loginError = document.getElementById('login-error');
+            const loggedInUserSpan = document.getElementById('logged-in-user');
+            const importButton = document.getElementById('import-button');
+            const fileInput = document.getElementById('file-input');
+            const modal = document.getElementById('name-modal');
+            const confirmButton = document.getElementById('confirm-import');
+            const cancelButton = document.getElementById('cancel-import');
+            const modalError = document.getElementById('modal-error');
+            const updaterInput = document.getElementById('updater-input');
+            const loggedOutControls = document.getElementById('logged-out-controls');
+            const loggedInControls = document.getElementById('logged-in-controls');
+            const loginEditButton = document.getElementById('login-edit-button');
+            const closeLoginButton = document.getElementById('close-login');
+            
+            // --- MOCK USER DATA ---
+            const users = {
+                "julio.coutrim@arlequim.com": {
+                    password: "99123",
+                    name: "Julio Coutrim"
+                }
+            };
+
+            // --- FUNCTIONS ---
+            function toggleEditMode(isLoggedIn) {
+                const taskCheckboxes = document.querySelectorAll('.task-checkbox');
+                const taskLabels = document.querySelectorAll('.task-label');
+
+                if (isLoggedIn) {
+                    loggedOutControls.classList.add('hidden');
+                    loggedInControls.classList.add('flex');
+                    loggedInControls.classList.remove('hidden');
+                    taskCheckboxes.forEach(cb => cb.disabled = false);
+                    taskLabels.forEach(label => {
+                        label.classList.add('cursor-pointer');
+                        label.classList.remove('disabled');
+                    });
+                } else {
+                    loggedOutControls.classList.remove('hidden');
+                    loggedInControls.classList.remove('flex');
+                    loggedInControls.classList.add('hidden');
+                    taskCheckboxes.forEach(cb => cb.disabled = true);
+                     taskLabels.forEach(label => {
+                        label.classList.remove('cursor-pointer');
+                        label.classList.add('disabled');
+                    });
+                }
+            }
+            
+            function handleLogin() {
+                const email = emailInput.value;
+                const password = passwordInput.value;
+                const user = users[email];
+
+                if (user && user.password === password) {
+                    currentUser = user;
+                    loginScreen.style.display = 'none';
+                    loggedInUserSpan.textContent = user.name;
+                    updaterInput.value = user.name;
+                    toggleEditMode(true);
+                } else {
+                    loginError.classList.remove('hidden');
+                }
+            }
+            
+            function handleLogout() {
+                currentUser = null;
+                toggleEditMode(false);
+            }
+
+            function loadTaskStatuses() {
+                document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+                    const taskId = checkbox.id;
+                    if (localStorage.getItem(storageKeyPrefix + taskId) === 'completed') {
+                        checkbox.checked = true;
+                    }
+                });
+                const updaterName = localStorage.getItem('updaterName');
+                const updateDate = localStorage.getItem('updateDate');
+                if (updaterName && updateDate) {
+                    document.getElementById('updater-name').textContent = updaterName;
+                    document.getElementById('update-date').textContent = updateDate;
+                }
+            }
+
+            function handleTaskChange(event) {
+                const checkbox = event.currentTarget;
+                const taskId = checkbox.id;
+                
+                if (checkbox.checked) {
+                    localStorage.setItem(storageKeyPrefix + taskId, 'completed');
+                } else {
+                    localStorage.removeItem(storageKeyPrefix + taskId);
+                }
+            }
+
+            function showMessage(message, isError = false) {
+                const messageBox = document.getElementById('message-box');
+                const messageText = document.getElementById('message-text');
+                
+                messageText.innerHTML = message; // Use innerHTML to render line breaks
+                messageBox.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+                
+                if (isError) {
+                    messageBox.classList.add('bg-red-100', 'text-red-800');
+                } else {
+                    messageBox.classList.add('bg-green-100', 'text-green-800');
+                }
+                
+                messageBox.style.display = 'block';
+                
+                setTimeout(() => {
+                    messageBox.style.display = 'none';
+                }, 5000);
+            }
+
+            // --- EVENT LISTENERS ---
+            loginButton.addEventListener('click', handleLogin);
+            logoutButton.addEventListener('click', handleLogout);
+            loginEditButton.addEventListener('click', () => loginScreen.style.display = 'flex');
+            closeLoginButton.addEventListener('click', () => loginScreen.style.display = 'none');
+            
+            document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', handleTaskChange);
+            });
+            
+            document.getElementById('export-button').addEventListener('click', () => {
+                const tasks = [];
+                document.querySelectorAll('.timeline-item').forEach(week => {
+                    const weekTitle = week.querySelector('.font-bold').textContent;
+                    week.querySelectorAll('details').forEach(block => {
+                        const summary = block.querySelector('summary');
+                        const summaryClone = summary.cloneNode(true);
+                        const plusSign = summaryClone.querySelector('span');
+                        if (plusSign) plusSign.remove();
+                        const blockTitle = summaryClone.textContent.trim();
+                        
+                        block.querySelectorAll('.task-label').forEach(taskLabel => {
+                            const checkbox = taskLabel.querySelector('.task-checkbox');
+                            const taskText = taskLabel.querySelector('span').textContent;
+                            tasks.push({
+                                'Semana': weekTitle,
+                                'Bloco': blockTitle,
+                                'Descrição da Atividade': taskText,
+                                'ID da Tarefa': checkbox.id,
+                                'Responsável pela Tarefa': '', // Empty column for user to fill
+                                'Status': checkbox.checked ? 'Concluído' : ''
+                            });
+                        });
+                    });
+                });
+
+                const worksheet = XLSX.utils.json_to_sheet(tasks);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Tarefas');
+                XLSX.writeFile(workbook, 'base_de_tarefas_piloto.xlsx');
+            });
+
+            importButton.addEventListener('click', () => {
+                modal.style.display = 'block';
+            });
+            
+            cancelButton.addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+
+            confirmButton.addEventListener('click', () => {
+                const updaterInput = document.getElementById('updater-input');
+                const updaterName = updaterInput.value.trim();
+                if (updaterName !== "") {
+                    modalError.style.display = 'none';
+                    fileInput.dataset.updaterName = updaterName;
+                    modal.style.display = 'none';
+                    fileInput.click();
+                } else {
+                    modalError.style.display = 'block';
+                }
+            });
+
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const sheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[sheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet);
+
+                        let tasksUpdated = 0;
+                        let updatedDescriptions = [];
+                        const completedWords = ['concluido', 'concluida', 'finalizado', 'finalizada'];
+
+                        json.forEach(row => {
+                            const taskId = row['ID da Tarefa'];
+                            const status = row['Status'];
+                            const checkbox = document.getElementById(taskId);
+                            if (checkbox) {
+                                const normalizedStatus = status ? status.toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
+                                const isCompleted = completedWords.includes(normalizedStatus);
+                                
+                                if (checkbox.checked !== isCompleted) {
+                                    checkbox.checked = isCompleted;
+                                    handleTaskChange({ currentTarget: checkbox });
+                                    tasksUpdated++;
+                                    updatedDescriptions.push(`- ${row['Descrição da Atividade']}`);
+                                }
+                            }
+                        });
+                        
+                        const updaterName = fileInput.dataset.updaterName || currentUser.name;
+                        const updateDate = new Date().toLocaleString('pt-BR');
+                        
+                        document.getElementById('updater-name').textContent = updaterName;
+                        document.getElementById('update-date').textContent = updateDate;
+                        localStorage.setItem('updaterName', updaterName);
+                        localStorage.setItem('updateDate', updateDate);
+
+                        if (tasksUpdated > 0) {
+                            let message = `<strong>${tasksUpdated} tarefas atualizadas:</strong><br>${updatedDescriptions.join('<br>')}`;
+                            showMessage(message);
+                        } else {
+                            showMessage('Nenhuma tarefa foi atualizada. Verifique se a coluna "Status" foi preenchida corretamente.', true);
+                        }
+                        
+                    } catch (error) {
+                        showMessage('Erro ao ler o arquivo. Verifique o formato.', true);
+                        console.error("Erro na importação:", error);
+                    } finally {
+                        fileInput.value = ''; 
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+            
+            // --- INITIALIZATION ---
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            document.querySelectorAll('.timeline-item').forEach(item => {
+                const startDate = new Date(item.dataset.start);
+                const endDate = new Date(item.dataset.end);
+                
+                startDate.setMinutes(startDate.getMinutes() + startDate.getTimezoneOffset());
+                endDate.setMinutes(endDate.getMinutes() + endDate.getTimezoneOffset());
+                endDate.setHours(23, 59, 59, 999);
+
+                if (today >= startDate && today <= endDate) {
+                    const card = item.querySelector('.card-interactive');
+                    card.classList.add('current-week-card');
+                    
+                    const icon = item.querySelector('.timeline-icon');
+                    if (icon) {
+                        icon.classList.add('current-week-icon-animation');
+                    }
+                    
+                    const titleContainer = item.querySelector('.font-semibold.text-gray-800 > span');
+                    if(titleContainer) {
+                        const badge = document.createElement('span');
+                        badge.textContent = 'Semana Atual';
+                        badge.className = 'inline-block ml-2 mt-1 lg:mt-0 bg-blue-200 text-blue-800 text-sm font-bold px-3 py-1 rounded-full shadow-sm';
+                        titleContainer.parentElement.appendChild(badge);
+                    }
+                }
+            });
+
+            // Initial page setup
+            toggleEditMode(false);
+            loadTaskStatuses();
+        });
+    </script>
+
+</body>
+</html>
